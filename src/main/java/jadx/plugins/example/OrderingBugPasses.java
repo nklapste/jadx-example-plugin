@@ -48,18 +48,19 @@ public final class OrderingBugPasses {
 				runAfter.add(BUILTIN_ANCHORS[i % BUILTIN_ANCHORS.length]);
 			}
 
-			// Dense, deterministic, and deliberately non-transitive cross-references between the
-			// custom passes. Mixing runAfter and runBefore mirrors "complicated before/after
-			// pairings" in a real multi-pass plugin tree.
-			for (int j = 0; j < PASS_COUNT; j++) {
-				if (j == i) {
-					continue;
-				}
+			// Dense, deterministic cross-references between the custom passes. Every edge points
+			// from a lower- to a higher-indexed pass (runAfter earlier passes, runBefore later
+			// passes), so the constraints are ACYCLIC and satisfiable - a valid ordering exists.
+			// This mirrors "complicated before/after pairings" in a real multi-pass plugin tree
+			// while still being dense enough to trigger the pre-fix TimSort crash.
+			for (int j = 0; j < i; j++) {
 				if ((i * 7 + j * 13) % 3 == 0) {
-					runAfter.add(passName(j));
+					runAfter.add(passName(j)); // this pass runs after an earlier one
 				}
-				if ((i * 5 + j * 11) % 4 == 0) {
-					runBefore.add(passName(j));
+			}
+			for (int k = i + 1; k < PASS_COUNT; k++) {
+				if ((i * 5 + k * 11) % 4 == 0) {
+					runBefore.add(passName(k)); // this pass runs before a later one
 				}
 			}
 			passes.add(new DemoOrderingPass(name, runAfter, runBefore));
