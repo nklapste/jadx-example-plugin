@@ -26,5 +26,10 @@ public class JadxExamplePlugin implements JadxPlugin {
 		if (options.isEnable()) {
 			context.addPass(new AddCommentPass());
 		}
+		if (options.isOrderingBugDemo()) {
+			for (DemoOrderingPass pass : OrderingBugPasses.build()) {
+				context.addPass(pass);
+			}
+		}
 	}
 }
