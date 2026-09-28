@@ -8,45 +8,48 @@ import org.junit.jupiter.api.Test;
 
 import jadx.api.JadxArgs;
 import jadx.api.JadxDecompiler;
+import jadx.api.JavaClass;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
 
 /**
- * End-to-end demonstration that the jadx pass-ordering (PassMerge / TimSort) crash exists in the
- * <b>published</b> jadx release this branch depends on (see {@code jadxVersion} in build.gradle.kts).
+ * End-to-end check against the locally-built jadx-core (see {@code jadxVersion = "dev"} in
+ * build.gradle.kts, resolved from {@code mavenLocal()}).
  *
  * <p>
  * Registers {@value OrderingBugPasses#PASS_COUNT} interdependent decompile passes and runs a full
- * decompile through the real jadx pipeline. {@code PassMerge} sorts passes with an invalid
- * {@code Comparator} (a partial dependency order, not a total order), so TimSort ({@code List.sort})
- * throws {@code IllegalArgumentException: "Comparison method violates its general contract!"}.
+ * decompile through the real jadx pipeline. Against an <b>unfixed</b> jadx-core this throws
+ * {@code IllegalArgumentException: "Comparison method violates its general contract!"} from
+ * {@code PassMerge} / TimSort. Once the pass-ordering logic is fixed (topological sort), the
+ * decompile completes and this test is GREEN.
  *
  * <p>
- * This test is GREEN when the bug is present: it asserts that the crash is thrown. The companion
- * branch that depends on the locally-built (and fixed) jadx asserts the opposite - that the
- * decompile completes without throwing.
+ * Rebuild+publish the local jadx before running:
+ *
+ * <pre>
+ *   (cd ../jadx &amp;&amp; ./gradlew :jadx-commons:jadx-zip:publishToMavenLocal \
+ *       :jadx-plugins:jadx-input-api:publishToMavenLocal \
+ *       :jadx-plugins:jadx-dex-input:publishToMavenLocal \
+ *       :jadx-plugins:jadx-smali-input:publishToMavenLocal \
+ *       :jadx-core:publishToMavenLocal)
+ * </pre>
  */
 class OrderingBugPassesTest {
 
 	@Test
-	public void publishedJadxCrashesOnInterdependentPasses() throws Exception {
+	public void interdependentPassesDoNotBreakOrdering() throws Exception {
 		JadxArgs args = new JadxArgs();
 		args.getInputFiles().add(getSampleFile("hello.smali"));
 		// enable the demo passes; keep the watermark comment pass out of the way
 		args.getPluginOptions().put(JadxExamplePlugin.PLUGIN_ID + ".enable", "no");
 		args.getPluginOptions().put(JadxExamplePlugin.PLUGIN_ID + ".orderingBugDemo", "yes");
 
-		Throwable thrown = catchThrowable(() -> {
-			try (JadxDecompiler jadx = new JadxDecompiler(args)) {
-				jadx.load();
-			}
-		});
-
-		assertThat(thrown)
-				.as("published jadx must exhibit the PassMerge/TimSort ordering crash")
-				.isInstanceOf(IllegalArgumentException.class)
-				.hasMessageContaining("Comparison method violates its general contract");
+		try (JadxDecompiler jadx = new JadxDecompiler(args)) {
+			jadx.load();
+			JavaClass cls = jadx.getClasses().get(0);
+			String clsCode = cls.getCode();
+			assertThat(clsCode).isNotBlank();
+		}
 	}
 
 	private File getSampleFile(String fileName) throws URISyntaxException {
