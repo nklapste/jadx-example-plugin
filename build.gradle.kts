@@ -15,7 +15,7 @@ plugins {
 dependencies {
 	// This branch depends on the real published jadx release from Maven Central to
 	// demonstrate that the pass-ordering (PassMerge/TimSort) crash exists in shipped jadx.
-	val jadxVersion = "1.5.1"
+	val jadxVersion = "1.5.6"
 	val isJadxSnapshot = jadxVersion.endsWith("-SNAPSHOT")
 
 	// use compile only scope to exclude jadx-core and its dependencies from result jar
