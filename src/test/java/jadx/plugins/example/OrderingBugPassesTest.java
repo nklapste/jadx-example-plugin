@@ -3,12 +3,16 @@ package jadx.plugins.example;
 import java.io.File;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 
 import jadx.api.JadxArgs;
 import jadx.api.JadxDecompiler;
 import jadx.api.JavaClass;
+import jadx.api.plugins.pass.JadxPassInfo;
+import jadx.core.dex.visitors.IDexTreeVisitor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -20,8 +24,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Registers {@value OrderingBugPasses#PASS_COUNT} interdependent decompile passes and runs a full
  * decompile through the real jadx pipeline. Against an <b>unfixed</b> jadx-core this throws
  * {@code IllegalArgumentException: "Comparison method violates its general contract!"} from
- * {@code PassMerge} / TimSort. Once the pass-ordering logic is fixed (topological sort), the
- * decompile completes and this test is GREEN.
+ * {@code PassMerge} / TimSort. Once the pass-ordering logic is fixed, the decompile completes, every
+ * declared runAfter/runBefore constraint holds in the merged pass list, and this test is GREEN.
  *
  * <p>
  * Rebuild+publish the local jadx before running:
@@ -46,9 +50,36 @@ class OrderingBugPassesTest {
 
 		try (JadxDecompiler jadx = new JadxDecompiler(args)) {
 			jadx.load();
+			assertPassesInDeclaredOrder(jadx);
+
 			JavaClass cls = jadx.getClasses().get(0);
 			String clsCode = cls.getCode();
 			assertThat(clsCode).isNotBlank();
+		}
+	}
+
+	/**
+	 * Check the merged decompile pass list (the order jadx runs passes in) against every
+	 * runAfter/runBefore constraint declared by the demo passes, including built-in anchors.
+	 */
+	private static void assertPassesInDeclaredOrder(JadxDecompiler jadx) {
+		List<String> order = jadx.getRoot().getPasses().stream()
+				.map(IDexTreeVisitor::getName)
+				.collect(Collectors.toList());
+		for (DemoOrderingPass pass : OrderingBugPasses.build()) {
+			JadxPassInfo info = pass.getInfo();
+			String name = info.getName();
+			assertThat(order).as("pass list: %s", order).containsOnlyOnce(name);
+			int pos = order.indexOf(name);
+			// built-in names can repeat (e.g. CodeShrinkVisitor); like jadx, resolve to the last one
+			for (String dep : info.runAfter()) {
+				assertThat(pos).as("%s must run after %s, pass list: %s", name, dep, order)
+						.isGreaterThan(order.lastIndexOf(dep));
+			}
+			for (String dep : info.runBefore()) {
+				assertThat(pos).as("%s must run before %s, pass list: %s", name, dep, order)
+						.isLessThan(order.lastIndexOf(dep));
+			}
 		}
 	}
 
